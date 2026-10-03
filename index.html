@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App</title>
+    <link rel="icon" type="image/x-icon" href="./favicon.ico">
+    <script>
+      try {
+        var opts = JSON.parse(localStorage.getItem('localOptions') || '{}');
+        if (opts.darkMode) {
+          document.documentElement.classList.add('dark');
+          document.write('<style>body{background-color:#1a1a2e!important;color:#e0e0e0;}</style>');
+        }
+      } catch(e) {}
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: 'class' }
+    </script>
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 dark:bg-[#1a1a2e] min-h-screen">
+    <div id="gate" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;display:none"
+         class="bg-gray-50 dark:bg-[#1a1a2e] flex items-center justify-center p-4">
+      <div class="w-full max-w-sm bg-white dark:bg-[#252536] rounded-xl shadow-lg p-8">
+        <h1 class="text-xl font-bold mb-1 text-gray-700 dark:text-gray-200">受保护的应用</h1>
+        <p class="text-xs text-gray-400 dark:text-gray-500 mb-5">需要口令解密后才能运行</p>
+        <input id="gate-input" type="password" autocomplete="current-password" spellcheck="false"
+               class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-transparent text-gray-800 dark:text-gray-100 outline-none focus:border-[#3399cc]"
+               placeholder="请输入口令">
+        <button id="gate-btn"
+                class="w-full mt-3 px-4 py-2 rounded bg-[#3399cc] text-white hover:opacity-90 disabled:opacity-50">解锁</button>
+        <div id="gate-msg" class="mt-3 text-sm text-red-500" style="min-height:1.25rem"></div>
+        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">20261003_235203 · index-224e333b.js</div>
+      </div>
+    </div>
+    <div id="app" class="dark:bg-[#1a1a2e]"></div>
+
+    <script>
+      // ── 由 scripts/encrypt-dist.mjs 在构建时替换的常量 ───────────────────────
+      var JS_ENC = "./assets/index-224e333b.js.enc";
+      var CSS_ENC = "./assets/index-a77b2e78.css.enc";
+      var SALT_B64 = "0qQyLKIWjNPHthxqhZ5iDQ==";
+      var ITERATIONS = 600000;
+      // ─────────────────────────────────────────────────────────────────────
+
+      var gate = document.getElementById("gate");
+      var input = document.getElementById("gate-input");
+      var btn = document.getElementById("gate-btn");
+      var msg = document.getElementById("gate-msg");
+
+      var DB_NAME = "appGate", STORE = "keys", KEY_ID = "key";
+
+      var setMsg = function (text, isError) {
+        msg.textContent = text;
+        msg.className = isError ? "mt-3 text-sm text-red-500" : "mt-3 text-sm text-gray-500";
+      };
+
+      var b64ToBytes = function (b64) {
+        var bin = atob(b64), out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      };
+
+      var openDb = function () {
+        return new Promise(function (resolve, reject) {
+          var req = indexedDB.open(DB_NAME, 1);
+          req.onupgradeneeded = function () { req.result.createObjectStore(STORE); };
+          req.onsuccess = function () { resolve(req.result); };
+          req.onerror = function () { reject(req.error); };
+        });
+      };
+
+      var dbGet = function (key) {
+        return openDb().then(function (db) {
+          return new Promise(function (resolve, reject) {
+            var r = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+            r.onsuccess = function () { resolve(r.result); };
+            r.onerror = function () { reject(r.error); };
+          });
+        });
+      };
+
+      var dbPut = function (key, value) {
+        return openDb().then(function (db) {
+          return new Promise(function (resolve, reject) {
+            var tx = db.transaction(STORE, "readwrite");
+            tx.objectStore(STORE).put(value, key);
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { reject(tx.error); };
+          });
+        });
+      };
+
+      var dbDel = function (key) {
+        return openDb().then(function (db) {
+          return new Promise(function (resolve, reject) {
+            var tx = db.transaction(STORE, "readwrite");
+            tx.objectStore(STORE).delete(key);
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { reject(tx.error); };
+          });
+        });
+      };
+
+      var deriveKey = function (passphrase) {
+        var enc = new TextEncoder();
+        return crypto.subtle
+          .importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"])
+          .then(function (base) {
+            return crypto.subtle.deriveKey(
+              { name: "PBKDF2", salt: b64ToBytes(SALT_B64), iterations: ITERATIONS, hash: "SHA-256" },
+              base,
+              // extractable=false：即使存进 IndexedDB，JS 也导不回密钥原始字节
+              { name: "AES-GCM", length: 256 },
+              false,
+              ["decrypt"]
+            );
+          });
+      };
+
+      // 密文布局：前 12 字节是本次加密的随机 IV，其余是 GCM 密文（含 16 字节认证标签）
+      var fetchDecrypt = function (key, url) {
+        return fetch(url, { cache: "no-store" })
+          .then(function (res) {
+            if (!res.ok) throw new Error("无法获取加密资源 " + url + "（HTTP " + res.status + "）");
+            return res.arrayBuffer();
+          })
+          .then(function (buf) {
+            var all = new Uint8Array(buf);
+            var iv = all.subarray(0, 12);
+            return crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, all.subarray(12));
+          })
+          .then(function (plain) { return new TextDecoder().decode(plain); });
+      };
+
+      var removeGateWhenMounted = function () {
+        var app = document.getElementById("app");
+        var started = Date.now();
+        var tick = function () {
+          if ((app && app.childElementCount > 0) || Date.now() - started > 3000) {
+            gate.remove();
+            return;
+          }
+          setTimeout(tick, 50);
+        };
+        tick();
+      };
+
+      // 先干净地解密两份资源，全部成功后才注入任何东西：
+      // 口令错误时页面保持原样，不会留下半成品状态
+      var unlock = function (key, persist) {
+        return Promise.all([fetchDecrypt(key, CSS_ENC), fetchDecrypt(key, JS_ENC)]).then(function (parts) {
+          var style = document.createElement("style");
+          style.textContent = parts[0];
+          document.head.appendChild(style);
+
+          var script = document.createElement("script");
+          // 用 module 而非 classic script：bundle 里可能有 import.meta，在非模块里是语法错误
+          script.type = "module";
+          // 用 textContent 而非 HTML 字符串拼接：不会被 HTML 解析破坏
+          script.textContent = parts[1];
+          document.head.appendChild(script);
+
+          removeGateWhenMounted();
+
+          return persist
+            ? dbPut(KEY_ID, key).catch(function (e) {
+                console.warn("口令记忆失败，下次仍需输入：", e);
+              })
+            : null;
+        });
+      };
+
+      var submit = function () {
+        var pass = input.value;
+        if (!pass) return;
+        btn.disabled = true;
+        input.disabled = true;
+        setMsg("正在解密…", false);
+        deriveKey(pass)
+          .then(function (key) { return unlock(key, true); })
+          .then(function () {})
+          .catch(function (e) {
+            // 口令错误与密文被篡改都表现为 OperationError
+            setMsg("口令错误", true);
+            input.value = "";
+            input.focus();
+            console.error("解锁失败：", e);
+          })
+          .then(function () {
+            btn.disabled = false;
+            input.disabled = false;
+          });
+      };
+
+      var showGate = function () {
+        gate.style.display = "";
+        if (input) { input.focus(); }
+        btn.addEventListener("click", submit);
+        input.addEventListener("keydown", function (e) { if (e.key === "Enter") submit(); });
+      };
+
+      var startup = function () {
+        if (!window.crypto || !crypto.subtle) {
+          showGate();
+          setMsg("当前环境不支持 WebCrypto，需要通过 https 或 localhost 访问", true);
+          return;
+        }
+        dbGet(KEY_ID)
+          .catch(function (e) { console.warn("读取已存密钥失败：", e); return null; })
+          .then(function (stored) {
+            if (!stored) { showGate(); return; }
+            return unlock(stored, false).catch(function () {
+              // 密钥失效或密文已换（重新构建过），清掉重来
+              return dbDel(KEY_ID).catch(function () {}).then(showGate);
+            });
+          })
+          .catch(function (e) {
+            console.error("启动失败：", e);
+            showGate();
+            setMsg("启动失败：" + (e && e.message ? e.message : e), true);
+          });
+      };
+
+      startup();
+    </script>
+</body>
+</html>
