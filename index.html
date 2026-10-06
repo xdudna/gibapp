@@ -31,16 +31,7 @@
          注释）被注进这条注释内部，里面的结束标记会提前关掉它 —— 注释文字漏到页面上，
          而且遮罩会出现两份，getElementById 只藏得掉第一份，看上去就是永久卡在载入中。
          下面两处占位符是它们唯一该出现的位置。 -->
-    <!-- 启动遮罩（样式）。这一段与下面的 BOOT_LOADER_HTML 一起被
-         scripts/encrypt-dist.mjs 提取，注入到线上那份口令模板里 ——
-         线上部署**不使用这个 index.html**（产物 HTML 来自 scripts/loader.template.html），
-         所以遮罩必须被搬过去一份，否则线上就没有它。
-         改这里就等于同时改线上，两处不会跑偏；标记不能删。 -->
     <style>
-      /* 启动遮罩。样式刻意全部手写、不用 Tailwind 工具类：
-         这段要赶在 Tailwind 的 CDN 脚本生效之前就能正确渲染，
-         而工具类要靠它跑完 JIT 才有效 —— 用工具类的话，
-         最先的几十毫秒会看到一个没样式的裸图标加一行字。 */
       #boot-loader {
         position: fixed;
         inset: 0;
@@ -53,16 +44,12 @@
         background: #f8f9fb;
         color: #4a5366;
         font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-        /* 只过渡 opacity：visibility 那种离散属性参与过渡时，
-           各浏览器的时序不一致，容易出现「已经透明了但还在挡点击」 */
         transition: opacity 0.24s ease;
       }
       html.dark #boot-loader {
         background: #1a1a2e;
         color: #b9c0cc;
       }
-      /* 藏起来用透明度而不是 display:none —— 后者不参与过渡，
-         会变成硬切。pointer-events 必须一起关掉，否则透明了还在挡点击 */
       #boot-loader.is-hidden {
         opacity: 0;
         pointer-events: none;
@@ -80,7 +67,6 @@
         width: 32px;
         height: 32px;
       }
-      /* 环转、图标不转：让 favicon 保持正立，只有外圈在动 */
       .boot-loader__ring {
         position: absolute;
         inset: 0;
@@ -97,8 +83,6 @@
         letter-spacing: 0.04em;
         opacity: 0.75;
       }
-      /* 关了动效的人也应该看到「正在载入」，只是别转那么急。
-         直接去掉动画会变成一个静止的环，看起来像卡死了 */
       @media (prefers-reduced-motion: reduce) {
         .boot-loader__ring { animation-duration: 2.6s; }
       }
@@ -114,7 +98,7 @@
         <button id="gate-btn"
                 class="w-full mt-3 px-4 py-2 rounded bg-[#3399cc] text-white hover:opacity-90 disabled:opacity-50">解锁</button>
         <div id="gate-msg" class="mt-3 text-sm text-red-500" style="min-height:1.25rem"></div>
-        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261006_230553_735E4C63</div>
+        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261006_231401_B0D0009D</div>
       </div>
     </div>
     <div id="app" class="dark:bg-[#1a1a2e]"></div>
@@ -125,11 +109,6 @@
          ＋拉取并解密两份 .enc 要一两秒，这段时间页面上原本**什么都没有**。
          现在遮罩从第一帧就在，口令卡片出现时它的不透明底会把遮罩盖住，
          应用挂载后由 bundle 里的 bootLoader.js 把它淡出。 -->
-    <!-- 启动遮罩。刻意住在 #app **外面**：Vue 挂载时会清空 #app 的内容，
-         放在里面的话遮罩会在挂载那一瞬间被抹掉，而那时首帧还没画出来 ——
-         中间会闪一下空白。放在外面才能从「浏览器画第一帧」连续盖到
-         「应用真的准备好了」，由 src/utils/bootLoader.js 控制显隐。
-         （与上面的 BOOT_LOADER_CSS 一起被提取到线上口令模板，标记不能删。） -->
     <div id="boot-loader" role="status" aria-live="polite">
       <div class="boot-loader__mark">
         <img src="./favicon.ico" alt="" />
@@ -140,7 +119,7 @@
 
     <script>
       // ── 由 scripts/encrypt-dist.mjs 在构建时替换的常量 ───────────────────────
-      var JS_ENC = "./assets/index-e5514d63.js.enc";
+      var JS_ENC = "./assets/index-a2c42253.js.enc";
       var CSS_ENC = "./assets/index-8c509ca6.css.enc";
       var SALT_B64 = "Z2liLWhlbHBlci1nYXRlMQ==";
       var ITERATIONS = 600000;
