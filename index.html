@@ -40,13 +40,19 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: #f8f9fb;
+        background: var(--boot-bg, #f8f9fb);
         color: #4a5366;
         font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
         transition: opacity 0.24s ease;
       }
+      /* 底色走自定义属性，而不是在这里直接写 background。
+         下面收尾那条 #boot-loader.is-revealing 要把它改成 transparent，
+         但 #boot-loader.is-revealing（1 个 id + 1 个类）压不过
+         html.dark #boot-loader（1 个 id + 1 个类 + 1 个元素）——
+         深色主题下底色会退不掉，绿圈一直蒙在那层底上。
+         拆成「谁提供颜色」和「谁使用颜色」之后，两边不再抢同一个属性。 */
       html.dark #boot-loader {
-        background: #1a1a2e;
+        --boot-bg: #1a1a2e;
         color: #b9c0cc;
       }
       #boot-loader.is-hidden {
@@ -119,15 +125,123 @@
         transition: box-shadow 0.6s ease-in-out;
       }
 
-      /* ── 收尾：页面进场 ────────────────────────────────────────────────
-         遮罩的淡出（0.24s）比页面进场（0.42s）短，
-         所以淡完之后页面还在收尾，那一点点余量就是「弹」的观感来源。 */
+      /* ── 收尾：绿圈撑开，页面随后落定 ──────────────────────────────────
+         分两件事同时发生：
+
+         1) 遮罩退的是**底色**，不是整层的 opacity。
+            整理层淡出会把里面的绿圈一起淡掉，而这 0.62s 里绿圈正要从
+            63px 撑到盖住整屏 —— 一路蒙着一层减淡的纱，撑得再远也不亮。
+            所以退底色、单独留圈，圈由 @keyframes 自己在后段淡出。
+            整层的 opacity 留到最后（BURST_MS 之后）才动，那时圈已经是 0 了。
+
+         2) 圈从原地撑开。这里必须是「撑开」而不是「换一个更大的圈」：
+            观感上它得像是那枚刚补满的绿圈自己张开，所以起点几何要和
+            上面那段弧**完全重合** —— 边框的中线要正好落在 r=30 那个圆上。
+            见下面 width/height 的取值注释。 */
+      .boot-loader__burst {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        /* 用 translate 居中，不用负 margin：
+           下面动的是 width/height，用负 margin 就得连 margin 一起动。 */
+        transform: translate(-50%, -50%);
+        /* 63 = 上面那枚弧的外径（中线 r=30，两侧各 1.5 的线宽）。 */
+        width: 63px;
+        height: 63px;
+        /* 线宽写成边框，是整个做法成立的关键 —— 为什么不用 SVG 缩放见下面
+           HTML 块里的注释（实测过，会变成 58px 的粗带）。
+           CSS 边框的粗细与盒子尺寸无关，撑到多大都还是 3px。 */
+        border: 3px solid #4f9d2f;
+        border-radius: 50%;
+        box-sizing: border-box;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* 撑到多大由 bootLoader.js 按视口对角线算好，写在 --boot-burst-size 上。
+         写死一个大数也能盖住屏幕，但圈会过早冲出视口、剩下的时间在屏外空跑，
+         看上去只是「唰」一下，谈不上扫过。按需要多大给多大才有那个过程。
+
+         代价：动 width/height 会触发布局与重绘（transform 本来可以只走合成）。
+         接受它的理由是正确性 —— 这是唯一能保证线宽恒定的写法，
+         而这一段只有 0.62s、只有一个脱离文档流的元素，布局代价可以忽略。
+
+         55% 那一帧只管 opacity：关键帧按属性生效，这一帧没提 width/height，
+         尺寸照旧从 0% 一口气走到 100%。
+         0.55 × 0.62s ≈ 0.34s，配上 ease-in-out，那时圈正好走到一半路程
+         （直径已越过屏幕上下边），从这里开始一边扫一边散去。 */
+      @keyframes boot-burst {
+        0% {
+          opacity: 1;
+          width: 63px;
+          height: 63px;
+        }
+        55% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          width: var(--boot-burst-size, 1600px);
+          height: var(--boot-burst-size, 1600px);
+        }
+      }
+
+      #boot-loader.is-revealing {
+        background: transparent;
+        pointer-events: none;
+        /* opacity 这条是给最后那记收尾用的：整层淡出时别硬切 */
+        transition: background-color 0.34s ease, opacity 0.24s ease;
+      }
+      /* 图标和那段弧让位给撑开的圈，0.12s 就走完 ——
+         它可以快，因为它和圈是同一个圆、同一个位置，重叠期看不出交接。 */
+      #boot-loader.is-revealing .boot-loader__mark {
+        opacity: 0;
+        transition: opacity 0.12s linear;
+      }
+      #boot-loader.is-revealing .boot-loader__burst {
+        /* 缓动是 ease-in-out，不是页面进场那条 ease-out —— 两件事的节奏本来就不同。
+           圈是「扫过去」，全程都该看得见：用 ease-out 的话它在前 35% 就把屏幕走完，
+           剩下四成时长在屏外空跑（实测：375ms 时圈已经越过四角）。
+           ease-in-out 让它在整段里匀速-ish 地走完，起手那一点点慢正好是
+           「刚补满、吸一口气再张开」。
+           内容的淡入反过来该用 ease-out：它要的是「快些出现」，不是「匀速」。
+           两条曲线一起起步、一起结束，只是内部节奏不同。 */
+        animation: boot-burst 0.62s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+      }
+
+      /* 页面这边：淡入比缩放先结束（48% 处就到 1）。
+         两个一起停会显得后半段只是「还在动」，分开才有「已经好了、只是还没站稳」的层次。
+         起点 1.015 是**放大**，所以内容是「收回来」的 —— 与圈向外张开同一个方向：
+         圈往外推，内容往里落。
+         代价是文档会短暂多出约 0.75vh 的可滚动溢出（transform 不影响布局，
+         但算作可滚动溢出），所以下面要锁一下滚动，见 html.is-boot-revealing。 */
       #app.is-booting-in {
-        animation: boot-page-in 0.42s ease-out;
+        animation: boot-page-in 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
       }
       @keyframes boot-page-in {
-        from { transform: scale(0.99); }
+        0% {
+          opacity: 0;
+          transform: scale(1.015);
+        }
+        48% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
+
+      /* 收尾这 0.6s 锁住文档滚动。
+         上面 #app 放大到 1.015，纵向会溢出视口约 0.75vh —— 视口右侧会闪出一条
+         纵向滚动条，内容跟着横移十几像素，比动效本身还显眼。
+         应用本身是 100vh + 内部滚动，文档层本来就没有可滚的东西，
+         锁这一下不会挡住任何操作；而且它只在这 0.6s 内存在。
+         由 bootLoader.js 在收尾开始时挂上、进场结束时摘掉。 */
+      html.is-boot-revealing,
+      html.is-boot-revealing body {
+        overflow: hidden;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         /* 转圈与补齐都是动效。这里只放慢，不取消 ——
            它是加载中唯一的反馈，取消了就成了完全不动的画面。
@@ -136,7 +250,14 @@
           animation-duration: 2.6s;
           transition: none;
         }
-        #app.is-booting-in { animation: none; }
+        /* 撑开是纯粹的装饰，减动效下直接不做。
+           JS 那条分支本来就走不到这里，写上是防止以后有人改了 JS 的判定。 */
+        .boot-loader__burst {
+          display: none;
+        }
+        #app.is-booting-in {
+          animation: none;
+        }
       }
     </style>
 </head>
@@ -150,7 +271,7 @@
         <button id="gate-btn"
                 class="w-full mt-3 px-4 py-2 rounded bg-[#3399cc] text-white hover:opacity-90 disabled:opacity-50">解锁</button>
         <div id="gate-msg" class="mt-3 text-sm text-red-500" style="min-height:1.25rem"></div>
-        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261007_020029_362C75C4</div>
+        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261007_022310_EDFC1B40</div>
       </div>
     </div>
     <div id="app" class="dark:bg-[#1a1a2e]"></div>
@@ -172,11 +293,30 @@
           <circle class="boot-loader__fill" cx="32" cy="32" r="30" pathLength="100"></circle>
         </svg>
       </div>
+      <!-- 收尾时从那枚补满的绿圈原地撑开的一张圈。
+           单独一个元素、不复用上面那枚：上面那枚是「一段会变长的弧」（靠
+           stroke-dasharray 和自转），这枚是「一个整圈在放大」，两者要同时存在
+           才能交叠着换手。
+
+           它是一个带边框的圆 div，不是 SVG —— 这一点是被实测逼出来的：
+           最初用 SVG 画圆、给 circle 挂 vector-effect="non-scaling-stroke"，
+           外层 <svg> 上挂 transform: scale()。结果是 3px 的线宽跟着一起放大，
+           在 1280×800（倍数 28）下量到 0.3 进度时线宽已经变成 **58px**，
+           圈成了一条粗带。
+           原因：non-scaling-stroke 抵消的是**视框内部**的坐标缩放
+           （viewBox、SVG 内部的 g/transform），对贴在 <svg> 元素本身上的
+           CSS transform 不起作用 —— 那是在整个 SVG 渲染完之后再对结果缩放。
+           用 CSS 边框就没有这回事：边框粗细与盒子尺寸无关，撑到多大都是 3px，
+           代价是动 width/height 会触发布局（见 CSS 里那段注释）。
+
+           颜色写死成补齐后的那个绿，不再跟 --boot-accent：
+           它接的是「就绪」这个结论，和上面那段弧补齐后的颜色是同一件事。 -->
+      <div class="boot-loader__burst"></div>
     </div>
 
     <script>
       // ── 由 scripts/encrypt-dist.mjs 在构建时替换的常量 ───────────────────────
-      var JS_ENC = "./assets/index-4998f7de.js.enc";
+      var JS_ENC = "./assets/index-5e17bec8.js.enc";
       var CSS_ENC = "./assets/index-5b3f937a.css.enc";
       var SALT_B64 = "Z2liLWhlbHBlci1nYXRlMQ==";
       var ITERATIONS = 600000;
