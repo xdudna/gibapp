@@ -12,6 +12,11 @@
           document.documentElement.classList.add('dark');
           document.write('<style>body{background-color:#1a1a2e!important;color:#e0e0e0;}</style>');
         }
+        // 转圈用用户自己的强调色，免得一个蓝 spinner 闪现在紫色主题的应用上。
+        // 与 index.html 里那段是同一处理 —— 遮罩在 #app 外面，继承不到 .app-root 的变量。
+        if (opts.accentColor) {
+          document.documentElement.style.setProperty('--boot-accent', opts.accentColor);
+        }
       } catch(e) {}
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -19,6 +24,163 @@
       tailwind.config = { darkMode: 'class' }
     </script>
     <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 启动遮罩的样式与标记都不在这里手写第二份，而是由 encrypt-dist.mjs
+         从源码 index.html 里按标记提取后注入（见 <!-- 启动遮罩（样式）。这一段与下面的 BOOT_LOADER_HTML 一起被
+         scripts/encrypt-dist.mjs 提取，注入到线上那份口令模板里 ——
+         线上部署**不使用这个 index.html**（产物 HTML 来自 scripts/loader.template.html），
+         所以遮罩必须被搬过去一份，否则线上就没有它。
+         改这里就等于同时改线上，两处不会跑偏；标记不能删。 -->
+    <style>
+      /* 启动遮罩。样式刻意全部手写、不用 Tailwind 工具类：
+         这段要赶在 Tailwind 的 CDN 脚本生效之前就能正确渲染，
+         而工具类要靠它跑完 JIT 才有效 —— 用工具类的话，
+         最先的几十毫秒会看到一个没样式的裸图标加一行字。 */
+      #boot-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #f8f9fb;
+        color: #4a5366;
+        font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+        /* 只过渡 opacity：visibility 那种离散属性参与过渡时，
+           各浏览器的时序不一致，容易出现「已经透明了但还在挡点击」 */
+        transition: opacity 0.24s ease;
+      }
+      html.dark #boot-loader {
+        background: #1a1a2e;
+        color: #b9c0cc;
+      }
+      /* 藏起来用透明度而不是 display:none —— 后者不参与过渡，
+         会变成硬切。pointer-events 必须一起关掉，否则透明了还在挡点击 */
+      #boot-loader.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .boot-loader__mark {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .boot-loader__mark img {
+        width: 32px;
+        height: 32px;
+      }
+      /* 环转、图标不转：让 favicon 保持正立，只有外圈在动 */
+      .boot-loader__ring {
+        position: absolute;
+        inset: 0;
+        border: 3px solid rgba(128, 128, 128, 0.18);
+        border-top-color: var(--boot-accent, #409eff);
+        border-radius: 50%;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-spin {
+        to { transform: rotate(360deg); }
+      }
+      .boot-loader__text {
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        opacity: 0.75;
+      }
+      /* 关了动效的人也应该看到「正在载入」，只是别转那么急。
+         直接去掉动画会变成一个静止的环，看起来像卡死了 */
+      @media (prefers-reduced-motion: reduce) {
+        .boot-loader__ring { animation-duration: 2.6s; }
+      }
+    </style> /
+         <!-- 启动遮罩。刻意住在 #app **外面**：Vue 挂载时会清空 #app 的内容，
+         放在里面的话遮罩会在挂载那一瞬间被抹掉，而那时首帧还没画出来 ——
+         中间会闪一下空白。放在外面才能从「浏览器画第一帧」连续盖到
+         「应用真的准备好了」，由 src/utils/bootLoader.js 控制显隐。
+         （与上面的 BOOT_LOADER_CSS 一起被提取到线上口令模板，标记不能删。） -->
+    <div id="boot-loader" role="status" aria-live="polite">
+      <div class="boot-loader__mark">
+        <img src="./favicon.ico" alt="" />
+        <span class="boot-loader__ring"></span>
+      </div>
+      <div class="boot-loader__text">正在载入…</div>
+    </div> 两个占位符）。一份源、两处生效，样式不会跑偏。 -->
+    <!-- 启动遮罩（样式）。这一段与下面的 BOOT_LOADER_HTML 一起被
+         scripts/encrypt-dist.mjs 提取，注入到线上那份口令模板里 ——
+         线上部署**不使用这个 index.html**（产物 HTML 来自 scripts/loader.template.html），
+         所以遮罩必须被搬过去一份，否则线上就没有它。
+         改这里就等于同时改线上，两处不会跑偏；标记不能删。 -->
+    <style>
+      /* 启动遮罩。样式刻意全部手写、不用 Tailwind 工具类：
+         这段要赶在 Tailwind 的 CDN 脚本生效之前就能正确渲染，
+         而工具类要靠它跑完 JIT 才有效 —— 用工具类的话，
+         最先的几十毫秒会看到一个没样式的裸图标加一行字。 */
+      #boot-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #f8f9fb;
+        color: #4a5366;
+        font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+        /* 只过渡 opacity：visibility 那种离散属性参与过渡时，
+           各浏览器的时序不一致，容易出现「已经透明了但还在挡点击」 */
+        transition: opacity 0.24s ease;
+      }
+      html.dark #boot-loader {
+        background: #1a1a2e;
+        color: #b9c0cc;
+      }
+      /* 藏起来用透明度而不是 display:none —— 后者不参与过渡，
+         会变成硬切。pointer-events 必须一起关掉，否则透明了还在挡点击 */
+      #boot-loader.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .boot-loader__mark {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .boot-loader__mark img {
+        width: 32px;
+        height: 32px;
+      }
+      /* 环转、图标不转：让 favicon 保持正立，只有外圈在动 */
+      .boot-loader__ring {
+        position: absolute;
+        inset: 0;
+        border: 3px solid rgba(128, 128, 128, 0.18);
+        border-top-color: var(--boot-accent, #409eff);
+        border-radius: 50%;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-spin {
+        to { transform: rotate(360deg); }
+      }
+      .boot-loader__text {
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        opacity: 0.75;
+      }
+      /* 关了动效的人也应该看到「正在载入」，只是别转那么急。
+         直接去掉动画会变成一个静止的环，看起来像卡死了 */
+      @media (prefers-reduced-motion: reduce) {
+        .boot-loader__ring { animation-duration: 2.6s; }
+      }
+    </style>
 </head>
 <body class="bg-gray-50 dark:bg-[#1a1a2e] min-h-screen">
     <div id="gate" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;display:none"
@@ -30,14 +192,33 @@
         <button id="gate-btn"
                 class="w-full mt-3 px-4 py-2 rounded bg-[#3399cc] text-white hover:opacity-90 disabled:opacity-50">解锁</button>
         <div id="gate-msg" class="mt-3 text-sm text-red-500" style="min-height:1.25rem"></div>
-        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261006_224104_35247B4F</div>
+        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261006_225910_20423A5E</div>
       </div>
     </div>
     <div id="app" class="dark:bg-[#1a1a2e]"></div>
 
+    <!-- 启动遮罩（由 encrypt-dist.mjs 从源码 index.html 提取注入）。
+         为什么线上需要它：解锁成功后口令会存进 IndexedDB，之后每次打开都走
+         「已存密钥」那条分支 —— 那条分支不显示口令卡片，而 PBKDF2 60 万次派生
+         ＋拉取并解密两份 .enc 要一两秒，这段时间页面上原本**什么都没有**。
+         现在遮罩从第一帧就在，口令卡片出现时它的不透明底会把遮罩盖住，
+         应用挂载后由 bundle 里的 bootLoader.js 把它淡出。 -->
+    <!-- 启动遮罩。刻意住在 #app **外面**：Vue 挂载时会清空 #app 的内容，
+         放在里面的话遮罩会在挂载那一瞬间被抹掉，而那时首帧还没画出来 ——
+         中间会闪一下空白。放在外面才能从「浏览器画第一帧」连续盖到
+         「应用真的准备好了」，由 src/utils/bootLoader.js 控制显隐。
+         （与上面的 BOOT_LOADER_CSS 一起被提取到线上口令模板，标记不能删。） -->
+    <div id="boot-loader" role="status" aria-live="polite">
+      <div class="boot-loader__mark">
+        <img src="./favicon.ico" alt="" />
+        <span class="boot-loader__ring"></span>
+      </div>
+      <div class="boot-loader__text">正在载入…</div>
+    </div>
+
     <script>
       // ── 由 scripts/encrypt-dist.mjs 在构建时替换的常量 ───────────────────────
-      var JS_ENC = "./assets/index-88bc800d.js.enc";
+      var JS_ENC = "./assets/index-03ec3cc2.js.enc";
       var CSS_ENC = "./assets/index-8c509ca6.css.enc";
       var SALT_B64 = "Z2liLWhlbHBlci1nYXRlMQ==";
       var ITERATIONS = 600000;
