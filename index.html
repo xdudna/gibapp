@@ -42,7 +42,12 @@
         justify-content: center;
         background: var(--boot-bg, #f8f9fb);
         color: #4a5366;
-        font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+        /* 字体跟着应用走，系统栈只作兜底。这一段是内联样式，id 选择器压得过
+           fonts.css 里那条 * 规则，所以这里必须自己把变量带上，否则文案会一直
+           停在系统字体上。安全性来自文案的出现时机：初始留空（见下面
+           .boot-loader__text），第一句由 js 在 applyGlobalTheme 之后才写进来，
+           那时 --app-font 已经落在 root 上 —— 不存在「先系统字体、再换一次」。 */
+        font-family: var(--app-font, system-ui), -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
         transition: opacity 0.24s ease;
       }
       /* 底色走自定义属性，而不是在这里直接写 background。
@@ -296,7 +301,7 @@
         <button id="gate-btn"
                 class="w-full mt-3 px-4 py-2 rounded bg-[#3399cc] text-white hover:opacity-90 disabled:opacity-50">解锁</button>
         <div id="gate-msg" class="mt-3 text-sm text-red-500" style="min-height:1.25rem"></div>
-        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261015_124602_42AF4691</div>
+        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261016_032948_D6691B13</div>
       </div>
     </div>
     <div id="app" class="dark:bg-[#1a1a2e]"></div>
@@ -318,11 +323,17 @@
           <circle class="boot-loader__fill" cx="32" cy="32" r="30" pathLength="100"></circle>
         </svg>
       </div>
-      <!-- 遮罩上的那一行字。阶段由 js 按**真实**的推进改（见 utils/bootLoader.js），
-           这里只是初始值：HTML 解析出来就在，代表「页面本身还在路上」。
+      <!-- 遮罩上的那一行字。阶段由 js 按**真实**的推进改（见 utils/bootLoader.js）。
+           初始**刻意留空**：这层 HTML 先于任何样式表和脚本解析出来，那会儿应用的
+           字体还没落到 root 上（--app-font 要等 applyGlobalTheme），此刻写字等于先按
+           兜底的系统字体画一遍、等应用字体上来再换一次 —— 同一句话被重画两遍，
+           比晚一点出现显眼得多（早先这里写死「正在获取页面…」，看到的就是这个）。
+           首句改由 js 写：main.js 在 applyGlobalTheme 之后、mount 之前写下
+           「正在获取页面…」，那之后是「正在读取数据…」「正在检查数据版本…」……
+           在它写进来之前，这一层只有图标和转圈。
            它绝对定位、不参与居中排版 —— 参与的话会把上面那枚 64px 的圈顶上去，
            而绿圈撑开的起点必须与那枚圈几何重合（见下面 boot-burst 的说明）。 -->
-      <div class="boot-loader__text" id="boot-loader-text">正在获取页面…</div>
+      <div class="boot-loader__text" id="boot-loader-text"></div>
       <!-- 收尾时从那枚补满的绿圈原地撑开的一张圈。
            单独一个元素、不复用上面那枚：上面那枚是「一段会变长的弧」（靠
            stroke-dasharray 和自转），这枚是「一个整圈在放大」，两者要同时存在
@@ -346,8 +357,8 @@
 
     <script>
       // ── 由 scripts/encrypt-dist.mjs 在构建时替换的常量 ───────────────────────
-      var JS_ENC = "./assets/index-09f6370a.js.enc";
-      var CSS_ENC = "./assets/index-237bceaf.css.enc";
+      var JS_ENC = "./assets/index-8437ce47.js.enc";
+      var CSS_ENC = "./assets/index-ad79f400.css.enc";
       var SALT_B64 = "Z2liLWhlbHBlci1nYXRlMQ==";
       var ITERATIONS = 600000;
       // ─────────────────────────────────────────────────────────────────────
