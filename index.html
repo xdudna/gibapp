@@ -50,16 +50,118 @@
         font-family: var(--app-font, system-ui), -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
         transition: opacity 0.24s ease;
       }
-      /* 底色走自定义属性，而不是在这里直接写 background。
-         下面收尾那条 #boot-loader.is-revealing 要把它改成 transparent，
-         但 #boot-loader.is-revealing（1 个 id + 1 个类）压不过
-         html.dark #boot-loader（1 个 id + 1 个类 + 1 个元素）——
-         深色主题下底色会退不掉，绿圈一直蒙在那层底上。
-         拆成「谁提供颜色」和「谁使用颜色」之后，两边不再抢同一个属性。 */
+      /* 底色走自定义属性，深色主题只改这一个值：
+         收尾是整层淡出，不再需要把 background 单独改成 transparent。 */
       html.dark #boot-loader {
         --boot-bg: #1a1a2e;
         color: #b9c0cc;
       }
+      /* ── 底版 ────────────────────────────────────────────────────────────
+         与欢迎页（Guide.vue）同一套：暗角 + 左右两团强调色雾 + 冷调渐变 +
+         一层四周淡出的点阵。它在这里被重写一遍，原因很实在 —— 遮罩是纯静态
+         HTML，比 Vue 早、也在 Vue 之外，拿不到那张卡片的样式。
+         这一层现在不只是好看：从欢迎页点「进入」时，两张页面的底必须对得上，
+         遮罩才能不淡入、直接把换页那一帧盖掉（见下面 is-entering 那段）。
+         所以颜色、光斑位置、点阵间距都跟 Guide.vue 那一份保持一致；改一边
+         就要改另一边，否则交接时会看见底跳一下。
+         没有光斑的漂移：这一层通常只存在一两秒，动起来更像卡住。 */
+      .boot-loader__scene {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+        pointer-events: none;
+        background:
+          radial-gradient(135% 125% at 50% 44%, transparent 42%, rgba(23, 43, 77, 0.06) 100%),
+          linear-gradient(160deg, #e8f1fb 0%, #d5e4f7 50%, #c2d6f0 100%);
+      }
+      /* 光斑与那两团大范围的强调色雾单独成元素、颜色走 color-mix：
+         color-mix 不可用时这里整条声明作废，只是没有强调色，底色照旧；
+         若把强调色写进 .boot-loader__scene 那条 background 里当第二份声明，
+         不支持时会把整个 background 一起判废（同一属性后写的赢），底就没了。 */
+      .boot-loader__glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(120% 90% at 6% 0%, color-mix(in srgb, var(--boot-accent, #3399cc) 18%, transparent), transparent 58%),
+          radial-gradient(110% 90% at 94% 100%, color-mix(in srgb, var(--boot-accent, #3399cc) 18%, transparent), transparent 60%);
+      }
+      .boot-loader__blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(56px);
+      }
+      .boot-loader__blob--a {
+        top: -16vmax;
+        left: -10vmax;
+        width: 46vmax;
+        height: 46vmax;
+        background: radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--boot-accent, #3399cc) 32%, transparent), transparent 68%);
+      }
+      .boot-loader__blob--b {
+        right: -14vmax;
+        bottom: -20vmax;
+        width: 52vmax;
+        height: 52vmax;
+        background: radial-gradient(circle at 55% 45%, color-mix(in srgb, var(--boot-accent, #3399cc) 32%, transparent), transparent 66%);
+      }
+      .boot-loader__blob--c {
+        top: 26%;
+        right: 18%;
+        width: 22vmax;
+        height: 22vmax;
+        background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--boot-accent, #3399cc) 18%, transparent), transparent 70%);
+      }
+      .boot-loader__scene::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(rgba(30, 41, 59, 0.2) 1px, transparent 1.1px);
+        background-size: 20px 20px;
+        opacity: 0.55;
+        -webkit-mask-image: radial-gradient(ellipse 64% 58% at 50% 50%, #000 0%, transparent 76%);
+        mask-image: radial-gradient(ellipse 64% 58% at 50% 50%, #000 0%, transparent 76%);
+      }
+      html.dark .boot-loader__scene {
+        background:
+          radial-gradient(135% 125% at 50% 44%, transparent 42%, rgba(0, 0, 0, 0.38) 100%),
+          linear-gradient(160deg, #1b1e2b 0%, #191c28 52%, #151822 100%);
+      }
+      html.dark .boot-loader__scene::after {
+        background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1.1px);
+        opacity: 0.4;
+      }
+      html.dark .boot-loader__blob {
+        opacity: 0.75;
+      }
+
+      /* ── 从欢迎页点「进入」进来的那一轮 ──────────────────────────────────
+         欢迎页那边先把卡片糊掉再走（Guide.vue 的 .guide--leaving），这里接着
+         这口气：内容从模糊变清楚。
+         遮罩本身不做淡入（transition: none）—— 它背后那一帧已经在换成 /main
+         了，淡入会把那张页面露出来。两层底一致，于是换页这一步被藏在失焦里：
+         看到的只是一片「糊」，然后对焦到加载页。
+         时长与 Guide 那段退场（0.4s）是连着的两半，别单独改。 */
+      #boot-loader.is-entering {
+        transition: none;
+      }
+      #boot-loader.is-entering .boot-loader__mark,
+      #boot-loader.is-entering .boot-loader__text {
+        animation: boot-focus-in 0.52s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+      }
+      @keyframes boot-focus-in {
+        from {
+          opacity: 0;
+          filter: blur(14px);
+          transform: scale(1.06);
+        }
+        to {
+          opacity: 1;
+          filter: blur(0);
+          transform: none;
+        }
+      }
+
       #boot-loader.is-hidden {
         opacity: 0;
         pointer-events: none;
@@ -67,8 +169,7 @@
 
       /* 遮罩上那一行阶段文案。
          绝对定位而不是跟着 flex 排版：#boot-loader 是 column + 居中，文字若参与
-         排版会把那枚 64px 的圈连带顶上去十几像素，而绿圈撑开的起点必须与它
-         几何重合（见下面 boot-burst 那段），差十几像素就看得出来。
+         排版会把那枚 64px 的圈连带顶上去十几像素，圈与图标就不在同一个圆心上了。
          44 = 圈半径 32 + 12 间距，所以它始终贴在圈的正下方。
          top 用 50% 而不是 center：这个盒子的定位基准是铺满整屏的 #boot-loader，
          50% 就是屏幕中线，也就是圈的圆心。 */
@@ -153,119 +254,42 @@
         transition: box-shadow 0.6s ease-in-out;
       }
 
-      /* ── 收尾：绿圈撑开，页面随后落定 ──────────────────────────────────
-         分两件事同时发生：
-
-         1) 遮罩退的是**底色**，不是整层的 opacity。
-            整理层淡出会把里面的绿圈一起淡掉，而这 0.62s 里绿圈正要从
-            63px 撑到盖住整屏 —— 一路蒙着一层减淡的纱，撑得再远也不亮。
-            所以退底色、单独留圈，圈由 @keyframes 自己在后段淡出。
-            整层的 opacity 留到最后（BURST_MS 之后）才动，那时圈已经是 0 了。
-
-         2) 圈从原地撑开。这里必须是「撑开」而不是「换一个更大的圈」：
-            观感上它得像是那枚刚补满的绿圈自己张开，所以起点几何要和
-            上面那段弧**完全重合** —— 边框的中线要正好落在 r=30 那个圆上。
-            见下面 width/height 的取值注释。 */
-      .boot-loader__burst {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        /* 用 translate 居中，不用负 margin：
-           下面动的是 width/height，用负 margin 就得连 margin 一起动。 */
-        transform: translate(-50%, -50%);
-        /* 63 = 上面那枚弧的外径（中线 r=30，两侧各 1.5 的线宽）。 */
-        width: 63px;
-        height: 63px;
-        /* 线宽写成边框，是整个做法成立的关键 —— 为什么不用 SVG 缩放见下面
-           HTML 块里的注释（实测过，会变成 58px 的粗带）。
-           CSS 边框的粗细与盒子尺寸无关，撑到多大都还是 3px。 */
-        border: 3px solid #4f9d2f;
-        border-radius: 50%;
-        box-sizing: border-box;
-        opacity: 0;
-        pointer-events: none;
-      }
-      /* 撑到多大由 bootLoader.js 按视口对角线算好，写在 --boot-burst-size 上。
-         写死一个大数也能盖住屏幕，但圈会过早冲出视口、剩下的时间在屏外空跑，
-         看上去只是「唰」一下，谈不上扫过。按需要多大给多大才有那个过程。
-
-         代价：动 width/height 会触发布局与重绘（transform 本来可以只走合成）。
-         接受它的理由是正确性 —— 这是唯一能保证线宽恒定的写法，
-         而这一段只有 0.62s、只有一个脱离文档流的元素，布局代价可以忽略。
-
-         55% 那一帧只管 opacity：关键帧按属性生效，这一帧没提 width/height，
-         尺寸照旧从 0% 一口气走到 100%。
-         0.55 × 0.62s ≈ 0.34s，配上 ease-in-out，那时圈正好走到一半路程
-         （直径已越过屏幕上下边），从这里开始一边扫一边散去。 */
-      @keyframes boot-burst {
-        0% {
-          opacity: 1;
-          width: 63px;
-          height: 63px;
-        }
-        55% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-          width: var(--boot-burst-size, 1600px);
-          height: var(--boot-burst-size, 1600px);
-        }
-      }
-
+      /* ── 收尾：整层淡出，页面在下面同时淡入 ──────────────────────────────
+         没有撑开的圈，也没有单独让位的元素：图标、弧、文案、底版一起消失，
+         「加载完了」这件事只由「旧的一层退、新的一层进」说完。
+         退的是整层 opacity。只退底色在这里等于没退 —— 底版铺满整屏，
+         底色本来就被它盖着（早先那版是靠圈撑开来遮住过程的，现在没有圈了）。
+         时长与 bootLoader.js 里的 FADE_MS 一致。 */
       #boot-loader.is-revealing {
-        background: transparent;
-        pointer-events: none;
-        /* opacity 这条是给最后那记收尾用的：整层淡出时别硬切 */
-        transition: background-color 0.34s ease, opacity 0.24s ease;
-      }
-      /* 图标、那段弧、以及那行阶段文案让位给撑开的圈，0.12s 就走完 ——
-         它可以快，因为它和圈是同一个圆、同一个位置，重叠期看不出交接。
-         文案也一起走：底色退去之后它就没有承载物了，留着会浮在页面上。 */
-      #boot-loader.is-revealing .boot-loader__mark,
-      #boot-loader.is-revealing .boot-loader__text {
         opacity: 0;
-        transition: opacity 0.12s linear;
-      }
-      #boot-loader.is-revealing .boot-loader__burst {
-        /* 缓动是 ease-in-out，不是页面进场那条 ease-out —— 两件事的节奏本来就不同。
-           圈是「扫过去」，全程都该看得见：用 ease-out 的话它在前 35% 就把屏幕走完，
-           剩下四成时长在屏外空跑（实测：375ms 时圈已经越过四角）。
-           ease-in-out 让它在整段里匀速-ish 地走完，起手那一点点慢正好是
-           「刚补满、吸一口气再张开」。
-           内容的淡入反过来该用 ease-out：它要的是「快些出现」，不是「匀速」。
-           两条曲线一起起步、一起结束，只是内部节奏不同。 */
-        animation: boot-burst 0.62s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+        pointer-events: none;
+        transition: opacity 0.36s ease;
       }
 
-      /* 页面这边：淡入比缩放先结束（48% 处就到 1）。
-         两个一起停会显得后半段只是「还在动」，分开才有「已经好了、只是还没站稳」的层次。
-         起点 1.015 是**放大**，所以内容是「收回来」的 —— 与圈向外张开同一个方向：
-         圈往外推，内容往里落。
+      /* 页面这边同时落定，比遮罩的淡出稍长一点，收在遮罩消失之后：
+         两段一起停会显得「两边都还在动」，错开才有「旧的走了、新的立住」。
+         这里**不带 opacity**：页面就在遮罩下面，遮罩一淡它自然会露出来；
+         两头都做淡入淡出，中段两层都半透明，衬在 body 底色上会发灰。
+         起点 1.015 是**放大**，所以内容是「收回来」的。
          代价是文档会短暂多出约 0.75vh 的可滚动溢出（transform 不影响布局，
          但算作可滚动溢出），所以下面要锁一下滚动，见 html.is-boot-revealing。 */
       #app.is-booting-in {
-        animation: boot-page-in 0.62s cubic-bezier(0.22, 0.61, 0.36, 1);
+        animation: boot-page-in 0.42s cubic-bezier(0.22, 0.61, 0.36, 1);
       }
       @keyframes boot-page-in {
         0% {
-          opacity: 0;
           transform: scale(1.015);
         }
-        48% {
-          opacity: 1;
-        }
         100% {
-          opacity: 1;
           transform: scale(1);
         }
       }
 
-      /* 收尾这 0.6s 锁住文档滚动。
+      /* 收尾这 0.42s 锁住文档滚动。
          上面 #app 放大到 1.015，纵向会溢出视口约 0.75vh —— 视口右侧会闪出一条
          纵向滚动条，内容跟着横移十几像素，比动效本身还显眼。
          应用本身是 100vh + 内部滚动，文档层本来就没有可滚的东西，
-         锁这一下不会挡住任何操作；而且它只在这 0.6s 内存在。
+         锁这一下不会挡住任何操作；而且它只在这 0.42s 内存在。
          由 bootLoader.js 在收尾开始时挂上、进场结束时摘掉。 */
       html.is-boot-revealing,
       html.is-boot-revealing body {
@@ -280,12 +304,13 @@
           animation-duration: 2.6s;
           transition: none;
         }
-        /* 撑开是纯粹的装饰，减动效下直接不做。
-           JS 那条分支本来就走不到这里，写上是防止以后有人改了 JS 的判定。 */
-        .boot-loader__burst {
-          display: none;
-        }
         #app.is-booting-in {
+          animation: none;
+        }
+        /* 「对焦」是纯粹的装饰，减动效下不做：内容直接以清楚的状态出现。
+           Guide 那边也是同一条取舍（不排退场，立刻跳转）。 */
+        #boot-loader.is-entering .boot-loader__mark,
+        #boot-loader.is-entering .boot-loader__text {
           animation: none;
         }
       }
@@ -301,7 +326,7 @@
         <button id="gate-btn"
                 class="w-full mt-3 px-4 py-2 rounded bg-[#3399cc] text-white hover:opacity-90 disabled:opacity-50">解锁</button>
         <div id="gate-msg" class="mt-3 text-sm text-red-500" style="min-height:1.25rem"></div>
-        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261017_043716_2491A0BF</div>
+        <div class="mt-2 text-[11px] text-gray-300 dark:text-gray-600 text-right">REL_20261020_203230_BDD55A56</div>
       </div>
     </div>
     <div id="app" class="dark:bg-[#1a1a2e]"></div>
@@ -313,6 +338,15 @@
          现在遮罩从第一帧就在，口令卡片出现时它的不透明底会把遮罩盖住，
          应用挂载后由 bundle 里的 bootLoader.js 把它淡出。 -->
     <div id="boot-loader" role="status" aria-live="polite" aria-label="Loading">
+      <!-- 底版：与欢迎页同一套底（渐变 + 三团光斑 + 点阵），收尾时整层跟着淡出。
+           光斑是三个元素而不是 CSS 里的伪元素，位置与 Guide.vue 里那三个一一对应；
+           它们不漂移，理由见样式里那段注释。 -->
+      <div class="boot-loader__scene" aria-hidden="true">
+        <span class="boot-loader__glow"></span>
+        <span class="boot-loader__blob boot-loader__blob--a"></span>
+        <span class="boot-loader__blob boot-loader__blob--b"></span>
+        <span class="boot-loader__blob boot-loader__blob--c"></span>
+      </div>
       <div class="boot-loader__mark">
         <img src="./favicon.ico" alt="" />
         <svg class="boot-loader__ring" viewBox="0 0 64 64" aria-hidden="true">
@@ -332,33 +366,14 @@
            「正在获取页面…」，那之后是「正在读取数据…」「正在检查数据版本…」……
            在它写进来之前，这一层只有图标和转圈。
            它绝对定位、不参与居中排版 —— 参与的话会把上面那枚 64px 的圈顶上去，
-           而绿圈撑开的起点必须与那枚圈几何重合（见下面 boot-burst 的说明）。 -->
+           圈与图标就不同心了。 -->
       <div class="boot-loader__text" id="boot-loader-text"></div>
-      <!-- 收尾时从那枚补满的绿圈原地撑开的一张圈。
-           单独一个元素、不复用上面那枚：上面那枚是「一段会变长的弧」（靠
-           stroke-dasharray 和自转），这枚是「一个整圈在放大」，两者要同时存在
-           才能交叠着换手。
-
-           它是一个带边框的圆 div，不是 SVG —— 这一点是被实测逼出来的：
-           最初用 SVG 画圆、给 circle 挂 vector-effect="non-scaling-stroke"，
-           外层 <svg> 上挂 transform: scale()。结果是 3px 的线宽跟着一起放大，
-           在 1280×800（倍数 28）下量到 0.3 进度时线宽已经变成 **58px**，
-           圈成了一条粗带。
-           原因：non-scaling-stroke 抵消的是**视框内部**的坐标缩放
-           （viewBox、SVG 内部的 g/transform），对贴在 <svg> 元素本身上的
-           CSS transform 不起作用 —— 那是在整个 SVG 渲染完之后再对结果缩放。
-           用 CSS 边框就没有这回事：边框粗细与盒子尺寸无关，撑到多大都是 3px，
-           代价是动 width/height 会触发布局（见 CSS 里那段注释）。
-
-           颜色写死成补齐后的那个绿，不再跟 --boot-accent：
-           它接的是「就绪」这个结论，和上面那段弧补齐后的颜色是同一件事。 -->
-      <div class="boot-loader__burst"></div>
     </div>
 
     <script>
       // ── 由 scripts/encrypt-dist.mjs 在构建时替换的常量 ───────────────────────
-      var JS_ENC = "./assets/index-966f8fed.js.enc";
-      var CSS_ENC = "./assets/index-a169bfa1.css.enc";
+      var JS_ENC = "./assets/index-a495ec77.js.enc";
+      var CSS_ENC = "./assets/index-57badcad.css.enc";
       var SALT_B64 = "Z2liLWhlbHBlci1nYXRlMQ==";
       var ITERATIONS = 600000;
       // ─────────────────────────────────────────────────────────────────────
